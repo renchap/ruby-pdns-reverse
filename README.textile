@@ -1,0 +1,5 @@
+h1. ruby-pdns-reverse
+
+This is a ruby-pdns module to allow easy management of reverse DNS using PowerDNS.
+
+This module require ruby-pdns 0.5.0 with the regexp patch (http://groups.google.com/group/ruby-pdns-users/browse_thread/thread/35065dd3fe4f02a4)
