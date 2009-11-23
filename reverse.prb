@@ -1,0 +1,66 @@
+module Pdns
+  # Domains for reverse DNS
+  domains = [ 'routers.fotolia.net', 'reverse.fotolia.net' ]
+  
+  # Subnets 
+  subnets = [ '193.164.220', '193.164.221' ]
+
+  default_domain = 'reverse.fotolia.net'
+
+  # Private methods
+  def self.get_reverse_from_ip address
+    nil
+  end
+
+  def self.get_ip_from_reverse reverse
+    nil
+  end
+
+  # We register for the subdomain
+  domains.each do |domain|
+    regexp = Regexp.new(".+\.#{domain.gsub('.','\\.')}")
+    newrecord(regexp) do |query, answer|
+      # The return type is always A
+      answer.qtype :A
+
+      # Look if the query is a valid reverse from our database
+      if(address = get_ip_from_reverse(query[:qname]))
+        answer.content address
+      else
+        # Try to find the IP from the query, if this is the default domain
+        if domain == default_domain
+          reverse = query[:qname]
+          match = reverse.match(Regexp.new('([0-9]+-[0-9]+-[0-9]+-[0-9]+)\\.'+domain.gsub('.','\\.')))
+          if match[1]
+            address = match[1].gsub('-', '.')
+            answer.content address
+          end
+        end
+      end
+    end
+  end
+
+  # We register for the IP ranges
+  subnets.each do |subnet|
+    regexp = Regexp.new(".+\\.#{subnet.split('.').reverse.join('.').gsub('.','\\.')}\\.in-addr\\.arpa")
+
+    newrecord(regexp) do |query, answer|
+      # Get the queried IP address from the request
+      address = query[:qname].match(/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.in-addr\.arpa/)[1].split('.').reverse.join('.')
+
+      # Set the PTR type answer
+      answer.qtype :PTR
+
+      # Look if the IP has a custom reverse DNS
+      if(reverse = get_reverse_from_ip(address))
+        answer.content(reverse)
+      else
+        # Default reverse
+        answer.content(address.gsub('.', '-')+'.'+default_domain)
+      end
+    end
+  end
+
+end
+
+# vi:tabstop=2:expandtab:ai:filetype=ruby:sw=2:softtabstop=2 
