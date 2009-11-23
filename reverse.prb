@@ -1,11 +1,11 @@
 module Pdns
   # Domains for reverse DNS
-  domains = [ 'routers.fotolia.net', 'reverse.fotolia.net' ]
+  domains = Pdns.config.get_module_config('reverse')['domains'].split(',')
   
   # Subnets 
-  subnets = [ '193.164.220', '193.164.221' ]
+  subnets = Pdns.config.get_module_config('reverse')['subnets'].split(',')
 
-  default_domain = 'reverse.fotolia.net'
+  default_domain = Pdns.config.get_module_config('reverse')['default_domain']
 
   # Private methods
   def self.get_reverse_from_ip address
