@@ -17,7 +17,7 @@ module Pdns
       if Pdns.config.get_module_config('reverse')['database']
         @database_path = Pdns.config.get_module_config('reverse')['database']
       else
-        @database_path = '/etc/powerdns/reverse-database.txt'
+        @database_path = '/etc/pdns/reverse-database.txt'
       end
       @content = nil
       @last_update = nil
