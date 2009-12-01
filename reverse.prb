@@ -84,7 +84,8 @@ module Pdns
 
   # We register for the IP ranges
   subnets.each do |subnet|
-    regexp = Regexp.new(".+\\.#{subnet.split('.').reverse.join('.').gsub('.','\\.')}\\.in-addr\\.arpa")
+    delegated_zone = subnet.split('.').reverse.join('.')+'.in-addr.arpa'
+    regexp = Regexp.new(".+\\.#{delegated_zone.gsub('.','\\.')}")
 
     newrecord(regexp) do |query, answer|
       result = query[:qname].match(/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.in-addr\.arpa/)
@@ -102,6 +103,16 @@ module Pdns
           # Default reverse
           answer.content(address.gsub('.', '-')+'.'+default_domain)
         end
+      end
+    end
+
+    # We need to anwser NS queries for delegated zone
+    newrecord(delegated_zone) do |query,answer|
+      Pdns.error(query)
+      if query[:qclass] == :IN and (query[:qtype] == :NS or query[:qtype] == :ANY)
+        answer.qtype :NS
+        answer.content 'ns3.fotolia.net'
+        answer.content 'ns4.fotolia.net'
       end
     end
   end
