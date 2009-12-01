@@ -1,3 +1,5 @@
+require 'singleton'
+
 module Pdns
   # Domains for reverse DNS
   domains = Pdns.config.get_module_config('reverse')['domains'].split(',')
@@ -7,14 +9,48 @@ module Pdns
 
   default_domain = Pdns.config.get_module_config('reverse')['default_domain']
 
-  # Private methods
-  def self.get_reverse_from_ip address
-    nil
-  end
+  class ReverseDatabase
+    include Singleton
 
-  def self.get_ip_from_reverse reverse
-    nil
+    def initialize
+      @database = nil
+      if Pdns.config.get_module_config('reverse')['database']
+        @database_path = Pdns.config.get_module_config('reverse')['database']
+      else
+        @database_path = '/etc/powerdns/reverse-database.txt'
+      end
+      @content = nil
+      @last_update = nil
+    end
+
+    def content
+      unless @content
+        @entries = Hash.new
+        File.foreach(@database_path) do |line|
+          line.strip!
+          # Skip comments
+          next if line[0..0] == '#'
+          row = line.split(',')
+          row[0].strip!
+          if row[0] and row[0].match(/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) and row[1]
+            # Valid entry
+            @entries[row[0]] = row[1].strip
+          end
+        end
+      end
+      @entries
+    end
+
+    def self.get_reverse_from_ip address
+      self.instance.content[address]
+    end
+
+    def self.get_ip_from_reverse reverse
+      result = self.instance.content.find{ |e| e[1] == reverse }
+      return result[0] if result and result[0]
+    end
   end
+  # Private methods
 
   # We register for the subdomain
   domains.each do |domain|
@@ -24,14 +60,14 @@ module Pdns
       answer.qtype :A
 
       # Look if the query is a valid reverse from our database
-      if(address = get_ip_from_reverse(query[:qname]))
+      if(address = ReverseDatabase.get_ip_from_reverse(query[:qname]))
         answer.content address
       else
         # Try to find the IP from the query, if this is the default domain
         if domain == default_domain
           reverse = query[:qname]
           match = reverse.match(Regexp.new('([0-9]+-[0-9]+-[0-9]+-[0-9]+)\\.'+domain.gsub('.','\\.')))
-          if match[1]
+          if match and match[1]
             address = match[1].gsub('-', '.')
             answer.content address
           end
@@ -52,7 +88,7 @@ module Pdns
       answer.qtype :PTR
 
       # Look if the IP has a custom reverse DNS
-      if(reverse = get_reverse_from_ip(address))
+      if(reverse = ReverseDatabase.get_reverse_from_ip(address))
         answer.content(reverse)
       else
         # Default reverse
