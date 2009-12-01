@@ -9,6 +9,8 @@ module Pdns
 
   default_domain = Pdns.config.get_module_config('reverse')['default_domain']
 
+  refresh_time = (Pdns.config.get_module_config('reverse')['refresh_time'].to_s or 60)
+
   class ReverseDatabase
     include Singleton
 
@@ -37,6 +39,7 @@ module Pdns
             @entries[row[0]] = row[1].strip
           end
         end
+        @last_update = Time.now
       end
       @entries
     end
@@ -56,20 +59,23 @@ module Pdns
   domains.each do |domain|
     regexp = Regexp.new(".+\.#{domain.gsub('.','\\.')}")
     newrecord(regexp) do |query, answer|
-      # The return type is always A
-      answer.qtype :A
-
-      # Look if the query is a valid reverse from our database
-      if(address = ReverseDatabase.get_ip_from_reverse(query[:qname]))
-        answer.content address
-      else
-        # Try to find the IP from the query, if this is the default domain
-        if domain == default_domain
-          reverse = query[:qname]
-          match = reverse.match(Regexp.new('([0-9]+-[0-9]+-[0-9]+-[0-9]+)\\.'+domain.gsub('.','\\.')))
-          if match and match[1]
-            address = match[1].gsub('-', '.')
-            answer.content address
+      # Answer only if request is A or ANY
+      if query[:qclass] == :IN and (query[:qtype] == :ANY or query[:qtype] == :PTR)
+        # The return type is always A
+        answer.qtype :A
+  
+        # Look if the query is a valid reverse from our database
+        if(address = ReverseDatabase.get_ip_from_reverse(query[:qname]))
+          answer.content address
+        else
+          # Try to find the IP from the query, if this is the default domain
+          if domain == default_domain
+            reverse = query[:qname]
+            match = reverse.match(Regexp.new('([0-9]+-[0-9]+-[0-9]+-[0-9]+)\\.'+domain.gsub('.','\\.')))
+            if match and match[1]
+              address = match[1].gsub('-', '.')
+              answer.content address
+            end
           end
         end
       end
@@ -81,18 +87,21 @@ module Pdns
     regexp = Regexp.new(".+\\.#{subnet.split('.').reverse.join('.').gsub('.','\\.')}\\.in-addr\\.arpa")
 
     newrecord(regexp) do |query, answer|
-      # Get the queried IP address from the request
-      address = query[:qname].match(/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.in-addr\.arpa/)[1].split('.').reverse.join('.')
-
-      # Set the PTR type answer
-      answer.qtype :PTR
-
-      # Look if the IP has a custom reverse DNS
-      if(reverse = ReverseDatabase.get_reverse_from_ip(address))
-        answer.content(reverse)
-      else
-        # Default reverse
-        answer.content(address.gsub('.', '-')+'.'+default_domain)
+      result = query[:qname].match(/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\.in-addr\.arpa/)
+      if query[:qclass] == :IN and (query[:qtype] == :ANY or query[:qtype] == :PTR) and result and result[1]
+        # Get the queried IP address from the request
+        address = result[1].split('.').reverse.join('.')
+  
+        # Set the PTR type answer
+        answer.qtype :PTR
+  
+        # Look if the IP has a custom reverse DNS
+        if(reverse = ReverseDatabase.get_reverse_from_ip(address))
+          answer.content(reverse)
+        else
+          # Default reverse
+          answer.content(address.gsub('.', '-')+'.'+default_domain)
+        end
       end
     end
   end
