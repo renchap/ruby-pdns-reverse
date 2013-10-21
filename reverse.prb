@@ -49,7 +49,7 @@ module Pdns
     end
 
     def self.get_ip_from_reverse reverse
-      result = self.instance.content.find{ |e| e[1] == reverse }
+      result = self.instance.content.find{ |e| e[1] == reverse.downcase }
       return result[0] if result and result[0]
     end
   end
